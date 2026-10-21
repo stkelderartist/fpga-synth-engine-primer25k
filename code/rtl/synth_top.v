@@ -26,6 +26,7 @@
 //  作者    : 第二代迭代 1
 // ============================================================================
 module synth_top #(
+    parameter CLOCK_HZ   = 27_000_000, // board clock; propagated to DDS table
     parameter VOICE_NUM  = 4,          // 复音数（改这里即可扩复音）
     parameter PHASE_BITS = 32,
     parameter BCK_HALF   = 4,          // I2S BCK 半周期，决定 fs = 52734.375 Hz
@@ -84,7 +85,7 @@ module synth_top #(
     genvar g;
     generate
         for (g = 0; g < VOICE_NUM; g = g + 1) begin : gen_fcw
-            note_table u_note (
+            note_table #(.CLOCK_HZ(CLOCK_HZ), .BCK_HALF(BCK_HALF)) u_note (
                 .note_idx (voice_note[g*NOTE_BITS +: NOTE_BITS]),
                 .fcw      (voice_fcw[g*PHASE_BITS +: PHASE_BITS])
             );
