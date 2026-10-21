@@ -1,192 +1,77 @@
-# fpga-synth-engine
+# fpga-synth-engine · Tang Primer 25K
 
-> 2026 全国大学生嵌入式芯片与系统设计竞赛 · FPGA 创新设计赛道 · 选题二
-> 《基于 FPGA 的实时多音色合成电子乐器引擎》
-> 平台：高云 **GW2AR-LV18QN88C8/I7**（Sipeed Tang Nano 20K）
+基于 **Sipeed Tang Primer 25K 核心板 + Dock 60033 底板**的实时多音色电子乐器引擎。
+从 [M3-Grant/fpga-synth-engine](https://github.com/M3-Grant/fpga-synth-engine) 的 `8e546d3` 移植，保留原作者代码和历史资料。本分支默认构建目标已切换至 25K。
 
----
+## 当前平台
 
-## 仓库状态
+| 项目 | 配置 |
+| --- | --- |
+| FPGA | GW5A-25，MG121N；默认 `GW5A-LV25MG121NC1/I0`、Device Version A |
+| 早期核心板 | 芯片标记 NES 的板卡按实际型号选择 `GW5A-LV25MG121NES`，见移植指南 |
+| 主时钟 | 50 MHz，FPGA 球位 E2；不使用 PLL |
+| I2S | Philips 格式，16 位 PCM，32 BCK/声道，左右相同 |
+| BCK / LRCK | 3.125 MHz / **48,828.125 Hz**，`BCK_HALF=8` |
+| 演奏 | 12 路高有效输入，C4～B4，4 声部；Dock S1 可直接试奏 C4 |
+| 音色 | 三角、方波、锯齿、25% 脉冲；Dock S2 循环切换 |
+| 音频硬件 | **外接** MAX98357A 模块 + 喇叭，或 PCM5102A + 有源音箱 |
 
-| 项目 | 值 |
-|---|---|
-| 首次提交 | `46b5d9e` — feat: 第一代可行性验证完成（21 项仿真全部通过） |
-| 分支 | `master` |
-| 追踪文件 | 30 个（4012 行） |
-| 代码状态 | **全部通过 Icarus Verilog 仿真验证，0 错误** |
-| 提交截止 | **2026-11-04 18:00** |
-
----
+**Dock 25K 没有 Nano 20K 的板载音频功放和六颗用户 LED。旧的 51/54/55/56 等数字管脚约束不能沿用。**
 
 ## 快速开始
 
-```bash
-# 进入代码目录
-cd code
+1. 按 [25K 移植指南](docs/Tang-Primer-25K移植指南.md)连接外部 I2S 模块，先运行 440 Hz 测试。
+2. 安装支持 GW5A-25 的 Gowin IDE（Sipeed 要求 V1.9.9 Beta-4 或更新版本），核对芯片丝印和 Device Version A。
+3. 仿真需 Python 3 和 Icarus Verilog，二者加入 PATH：
 
-# 一键跑完三套仿真（Windows，双击也可以）
-run_sim_all.bat
+```sh
+python code/run_sim.py
 ```
 
-看到三处 `全部通过：0 个错误` 即正常。
+Windows 也可运行 `code/run_sim_all.bat` 或 `code/run_sim_all.ps1`。支持 `--iverilog` 和 `--vvp` 指定完整工具路径。
 
-手动跑单套：
-```bat
-D:\Tools\iverilog\bin\iverilog.exe -g2005 -o sim_i2s.out rtl\i2s_tx.v sim\tb_i2s_tx.v
-D:\Tools\iverilog\bin\vvp.exe sim_i2s.out
+4. 在 PowerShell 中构建（Gowin 安装目录由本机指定）：
+
+```powershell
+./code/synth/build.ps1 -Target tone_test -GowinHome 'D:/Gowin/你的安装目录'
+./code/synth/build.ps1 -Target synth_board12 -GowinHome 'D:/Gowin/你的安装目录'
 ```
 
-> 工具路径：iverilog 在 `D:\Tools\iverilog\bin`（v14），或退回到 `C:\iverilog\bin`；
-> 波形查看用 `C:\iverilog\gtkwave\bin\gtkwave.exe`。
+先只检查工程输入并生成 Tcl：
 
----
-
-## 目录结构
-
-```
-fpga-synth-engine/
-├── 00-先看我.md           ← 总入口，先读这个
-├── .gitattributes         ← 禁止换行符转换（* -text）
-├── .gitignore             ← 排除 *.vcd / *.out / *.fs / impl/ 等产物
-│
-├── code/
-│   ├── rtl/               ← 可综合 RTL
-│   │   ├── i2s_tx.v           标准 Philips I2S 发送机
-│   │   ├── tone_test_top.v    440Hz 发声顶层（生死线工程）
-│   │   ├── note_table.v       音名→频率控制字表（C4~C6，25 个半音）
-│   │   ├── led_ctrl_top.v     LED 模式控制顶层
-│   │   ├── clk_div.v / debounce.v / pwm.v
-│   ├── sim/               ← 仿真测试台
-│   ├── constraints/       ← 管脚约束（.cst）
-│   ├── tools/gen_fcw.py   ← 生成 note_table.v 的脚本
-│   ├── run_sim_all.bat    ← 一键仿真
-│   └── I2S调试记录.md      ← 踩坑全记录
-│
-└── docs/                  ← 8 篇项目文档
-    ├── 06-追赶排期（10-08起）.md   ← 当前使用的排期
-    ├── 07-接线指南.md             ← 板卡引脚 / 喇叭焊接
-    ├── 08-交互硬件接线.md         ← 触摸、红外、按键
-    └── 01~05、README
+```powershell
+./code/synth/build.ps1 -Target synth_board12 -GenerateOnly
 ```
 
----
+脚本同时添加 `.cst` 与 20 ns `.sdc`，配置 CPU、SSPI、READY 复用。生成的码流位于 `build/tang_primer25k/<target>/impl/pnr/`。使用 Gowin Programmer 手动选择实际器件和外部 Flash；初次建议 SRAM 下载。
 
-## ⚠️ 三个关键结论（务必记住）
+GUI 工程位于 `code/boards/tang_primer25k/{tone_test,synth_board12}.gprj`，GUI 用户还须按指南设置双用途管脚复用。
 
-### 1. 采样率是 52734.375 Hz，不是 48000
+## 目录
 
-```
-fs = 27 MHz ÷ 8 (BCK_HALF) ÷ 64 (BCK per LRCK) = 52734.375 Hz
-```
-
-频率控制字必须用：
-```
-FCW = f × 2^32 ÷ 52734.375
-```
-
-**若按 48000 计算，A4 440Hz 会变成 483Hz，明显跑调。**
-`note_table.v` 已用正确值生成，**不要手改**，要改就改 `tools/gen_fcw.py` 重新生成。
-
-### 2. I2S 必须用标准 Philips 时序
-
-数据在 LRCK 跳变后**延迟 1 个 BCK** 才开始发 MSB（1 个无效位 + 16 数据位 + 15 填充位）。
-
-原左对齐写法会导致**所有采样值左移一位 = 音量翻倍 + 削波失真**。`i2s_tx.v` 已修正。
-
-### 3. 喇叭要焊，不是插
-
-Tang Nano 20K 板载 **MAX98357A**（I2S DAC + D 类功放），输出在板上的 **SPK+ / SPK− 两个裸焊盘**，没有插座。
-
-**必须自己焊线，且是 BTL 桥接输出——两边都不能接地，接反/接地会烧芯片。**
-
----
-
-## 编码与换行约定（重要，已实测）
-
-| 规则 | 原因 |
-|---|---|
-| **所有文件 UTF-8 无 BOM** | `.v` 文件若带 BOM，iverilog 会报 `No top level modules` 而**编译失败** |
-| **`.gitattributes` 设为 `* -text`** | 禁止 Git 自动转换换行符，避免改动 Verilog 源码字节 |
-| **`.bat` 保持 CRLF** | Windows cmd.exe 要求 |
-| **其余文件保持原始字节** | 源码要同时给 iverilog 和 Gowin 云源软件用，任何自动改写都可能引入难查问题 |
-
-> 本次建仓时曾尝试给文件加 BOM，实测导致 iverilog 编译失败，已全部回退并记录在此。
-
----
-
-## 当前进度
-
-### 版本历史
-
-| 版本 | 内容 | 状态 |
-|---|---|---|
-| `demo0.0.1` | 单音发声链路（I2S + 波形表），21 项仿真通过 | ✅ |
-| `demo0.0.2` | **复音架构（VOICE_NUM=4）+ ADSR 包络** | ✅ |
-
-### demo0.0.2 成果
-
-| 能力 | 状态 |
-|---|---|
-| 复音 ≥ 4 | ✅ 参数化，可扩至 8/16/32 |
-| ADSR 包络 | ✅ 四段状态机（ATTACK/DECAY/SUSTAIN/RELEASE） |
-| 多声部实时混音 | ✅ 饱和处理防削波 |
-| 单音实时变调 | ✅ 音符 → FCW 查表 |
-| 纯硬件合成 | ✅ 全部 Verilog |
-| 控制延迟 ≤ 10ms | ✅ 约 0.5ms |
-| **≥2 维交互** | ❌ 待做（迭代 03） |
-
-**仿真验证**：一键脚本 `run_sim_all.bat` 覆盖 6 套测试，全部通过。
-
-```
-1/6  i2s_tx         I2S 发送机
-2/6  note_alloc     音符分配器
-3/6  adsr           包络发生器
-4/6  synth_top      复音集成
-5/6  tone_test_top  440Hz 生死线工程
-6/6  led_ctrl_top   LED 模式
+```text
+code/boards/tang_primer25k/  25K 顶层、两套 CST、SDC、GUI 工程和接线入口
+code/rtl/                   共享合成内核，保留旧顶层供历史回归
+code/sim/tb_primer25k.v      50 MHz 实际速率下的板级自检
+code/synth/build.ps1        默认 25K 构建脚本
+code/synth/build_nano20k.ps1 历史 Nano 构建，仅用于原板
+code/run_sim.py             跨平台 11 套回归，检查错误标记与退出码
+docs/Tang-Primer-25K移植指南.md 当前硬件、音准和烧录指南
+docs/legacy-nano20k/        原入口文档备份
 ```
 
-### 复音顶层模块结构
+其余旧文档均标有历史提示；`iterations/` 和旧 beta ZIP、音频/频谱图是 Nano 20K 历史快照，不是 25K 的验证结果。
 
-```
-音符事件 → note_alloc → note_table → oscillator_array(×4) → mix_tree → i2s_tx
-                              ↑
-                           adsr(×4)
-```
+## 验证范围
 
-**扩复音数只需改 `VOICE_NUM` 一个参数。**
+新增测试覆盖 25 个音的 FCW、BCK/LRCK 周期、440 Hz 相位变化、I2S 串行解码、上电静音、三键复音、12 键事件、功放门控以及 S1/S2。原有 10 套测试仍执行。GitHub Actions 在 push/PR 后运行相同仿真。
 
-### 迭代说明书
+本次环境没有 Gowin 工具链和实体板卡，因此**不提供已验证码流，不宣称综合、布局布线、时序收敛或实板音频通过**。下载前需完成本机 Gowin 构建及接线、波形和音准检查。见 [验证记录](docs/25K验证记录.md)。
 
-| 文档 | 内容 |
-|---|---|
-| `docs/iterations/迭代001-复音架构.md` | 复音设计、分配策略、混音饱和 |
-| `docs/iterations/迭代02-ADSR包络.md` | 四段包络、事件锁存、坑记录 |
+## 来源
 
-### 离线存档
+- [Sipeed Tang Primer 25K 官方介绍](https://wiki.sipeed.com/hardware/zh/tang/tang-primer-25k/primer-25k.html)
+- [Sipeed 官方示例](https://github.com/sipeed/TangPrimer-25K-example)，核对版本 `27c1737b687369f46baff9cf621cd7499a1b7fd4`
+- [Sipeed 官方原理图目录](https://dl.sipeed.com/shareURL/TANG/Primer_25K/02_Schematic)
 
-`iterations/demo0.0.2/` —— 本轮新增文件快照 + 清单
-
-### 下一步（迭代 03）
-
-**目标：交互层** —— 按键/触摸 → 音符映射，做出可直接上板演奏的电子琴。
-
----
-
-## 上板（生死线工程）
-
-| 信号 | 管脚 | 说明 |
-|---|---|---|
-| `clk` | 4 | 板载 27 MHz |
-| `i2s_din` | 54 | → MAX98357A DIN |
-| `i2s_lrck` | 55 | → MAX98357A LRCK |
-| `i2s_bck` | 56 | → MAX98357A BCLK |
-| `pa_en` | 51 | 功放使能（固定为 1） |
-| `led[0..5]` | 15~20 | 板载 6 颗 LED |
-
-Gowin 流程：New Project（GW2AR-LV18QN88C8/I7）→ 加 `i2s_tx.v` + `tone_test_top.v`
-→ 导入 `constraints/tone_test.cst` → Synthesize → Place & Route → Programmer。
-
-**响 = 生死线过了，剩下都是锦上添花。**
-
-详见 `00-先看我.md` 与 `docs/06-追赶排期（10-08起）.md`。
+原仓库没有明确开源许可证，本移植不额外授予原代码的许可；请保留原作者署名，分发和使用范围需与原作者确认。
